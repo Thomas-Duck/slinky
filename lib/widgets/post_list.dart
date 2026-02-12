@@ -7,45 +7,35 @@ class PostList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Consumer<ChannelsProvider>(
       builder: (context, channels, child) {
         if (channels.selectedChannelId == null) {
           return Center(
             child: Text(
               'Select a channel',
-              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+              style: theme.textTheme.titleMedium,
             ),
           );
         }
 
-        // Mock posts for demo
-        final mockPosts = [
-          {
-            'id': '1',
-            'title': 'FYP Proposal - Team A',
-            'body': 'Need 3 members for AI project...',
-            'isProposal': true,
-          },
-          {
-            'id': '2',
-            'title': 'Class Timetable Change',
-            'body': 'Lab moved to Room B204...',
-            'isProposal': false,
-          },
-          {
-            'id': '3',
-            'title': 'Project Partner Request',
-            'body': 'Looking for ML expert...',
-            'isProposal': true,
-          },
-        ];
+        final posts = channels.postsForSelectedChannel;
+        if (posts.isEmpty) {
+          return Center(
+            child: Text(
+              'No posts in this channel',
+              style: theme.textTheme.bodyMedium,
+            ),
+          );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: mockPosts.length,
+          itemCount: posts.length,
           itemBuilder: (context, index) {
-            final post = mockPosts[index] as Map<String, dynamic>;
-            final body = post['body'] as String;
+            final post = posts[index];
+            final body = post.body;
             final bodyPreview =
                 body.length > 50 ? '${body.substring(0, 50)}...' : body;
 
@@ -54,28 +44,48 @@ class PostList extends StatelessWidget {
               child: ListTile(
                 contentPadding: const EdgeInsets.all(16),
                 title: Text(
-                  post['title'] as String,
+                  post.title,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(bodyPreview),
-                trailing: post['isProposal'] as bool
-                    ? Chip(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (post.isProposal)
+                      Chip(
                         label: Text(
                           'PROPOSAL',
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.orange[900],
+                            color: Colors.orange.shade700,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        backgroundColor: Colors.orange[100],
+                        backgroundColor: Colors.orange.withValues(alpha: 0.18),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 0,
                         ),
                       )
-                    : Icon(Icons.comment_outlined, color: Colors.grey[600]),
-                onTap: () => channels.selectPost(post['id'] as String),
+                    else
+                      Icon(Icons.comment_outlined, color: theme.iconTheme.color),
+                    IconButton(
+                      tooltip: channels.isPostInAgenda(post.id)
+                          ? 'Remove from agenda'
+                          : 'Add to agenda',
+                      onPressed: () => channels.togglePostInAgenda(post.id),
+                      icon: Icon(
+                        channels.isPostInAgenda(post.id)
+                            ? Icons.bookmark
+                            : Icons.bookmark_border,
+                        color: channels.isPostInAgenda(post.id)
+                            ? Colors.blue[700]
+                            : scheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+                onTap: () => channels.selectPost(post.id),
               ),
             );
           },

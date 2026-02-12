@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/providers.dart';
 import 'main_screen.dart';
+import 'profile_setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _otpController = TextEditingController();
   bool _showOtp = false;
+  String _selectedRole = 'student';
 
   @override
   void dispose() {
@@ -27,6 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Consumer<AuthProvider>(
         builder: (context, auth, child) {
+          final theme = Theme.of(context);
+          final scheme = theme.colorScheme;
           if (auth.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -36,14 +40,13 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.school, size: 80, color: Colors.blue[700]),
+                Icon(Icons.school, size: 80, color: scheme.primary),
                 const SizedBox(height: 20),
                 Text(
-                  'Campus Communication',
-                  style: TextStyle(
+                  'slinky',
+                  style: theme.textTheme.headlineMedium?.copyWith(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -55,6 +58,34 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: const Icon(Icons.email),
                   ),
                   keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: theme.dividerColor),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedRole,
+                      isExpanded: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'student',
+                          child: Text('I am a Student'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'staff',
+                          child: Text('I am Staff'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _selectedRole = value);
+                      },
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 if (_showOtp)
@@ -74,7 +105,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     if (_showOtp) {
                       await Provider.of<AuthProvider>(context, listen: false)
                           .loginWithEmail(
-                              _emailController.text, _otpController.text);
+                        _emailController.text,
+                        _otpController.text,
+                        selectedRole: _selectedRole,
+                      );
                       if (context.mounted) {
                         final auth =
                             Provider.of<AuthProvider>(context, listen: false);
@@ -85,7 +119,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => const MainScreen()),
+                                builder: (_) => auth.requiresProfileSetup
+                                    ? const ProfileSetupScreen(fromLogin: true)
+                                    : const MainScreen(),
+                              ),
                             );
                           }
                         }
@@ -99,8 +136,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    backgroundColor: Colors.blue[700],
-                    foregroundColor: Colors.white,
+                    backgroundColor: scheme.primary,
+                    foregroundColor: scheme.onPrimary,
                   ),
                   child: Text(_showOtp ? 'Login' : 'Send OTP'),
                 ),

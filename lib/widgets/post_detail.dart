@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/providers.dart';
+import '../models/models.dart';
 
 class PostDetail extends StatefulWidget {
   const PostDetail({super.key});
@@ -12,6 +14,37 @@ class PostDetail extends StatefulWidget {
 class _PostDetailState extends State<PostDetail> {
   final _chatController = TextEditingController();
   String? _proposalResponse; // null = not answered, 'accepted' or 'rejected'
+  String? _lastPostId;
+
+  Future<void> _handlePostMenuAction(
+    BuildContext context, {
+    required String action,
+    required ChannelsProvider channels,
+    required Post? selectedPost,
+  }) async {
+    if (selectedPost == null) return;
+    if (action == 'toggle_agenda') {
+      channels.togglePostInAgenda(selectedPost.id);
+      return;
+    }
+    if (action == 'copy_post') {
+      await Clipboard.setData(
+        ClipboardData(text: '${selectedPost.title}\n\n${selectedPost.body}'),
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post copied to clipboard')),
+      );
+      return;
+    }
+    if (action == 'refresh_feedback') {
+      await channels.loadFeedbackForPost(selectedPost.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Feedback refreshed')),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -21,10 +54,25 @@ class _PostDetailState extends State<PostDetail> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ChannelsProvider>(
-      builder: (context, channels, child) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Consumer2<AuthProvider, ChannelsProvider>(
+      builder: (context, auth, channels, child) {
         final hasSelectedPost = channels.selectedPostId != null;
-        const isProposal = true; // Demo post is a proposal
+        final selectedPost = channels.selectedPost;
+        final isProposal = selectedPost?.isProposal ?? false;
+
+        if (_lastPostId != channels.selectedPostId) {
+          _lastPostId = channels.selectedPostId;
+          _proposalResponse = null;
+          if (selectedPost != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                channels.loadFeedbackForPost(selectedPost.id);
+              }
+            });
+          }
+        }
 
         return Column(
           children: [
@@ -32,8 +80,8 @@ class _PostDetailState extends State<PostDetail> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+                color: scheme.surface,
+                border: Border(bottom: BorderSide(color: theme.dividerColor)),
               ),
               child: Row(
                 children: [
@@ -43,7 +91,7 @@ class _PostDetailState extends State<PostDetail> {
                       children: [
                         Text(
                           hasSelectedPost
-                              ? 'FYP Proposal - Team A'
+                              ? (selectedPost?.title ?? 'Post')
                               : 'Select a post',
                           style: const TextStyle(
                             fontSize: 20,
@@ -52,9 +100,9 @@ class _PostDetailState extends State<PostDetail> {
                         ),
                         Text(
                           hasSelectedPost
-                              ? 'Roles: Student-Y2, Staff-CS'
+                              ? 'Roles: ${selectedPost?.authorRole.toUpperCase() ?? "N/A"}'
                               : '',
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: theme.textTheme.bodyMedium,
                         ),
                         if (hasSelectedPost &&
                             channels.selectedPostId != null &&
@@ -65,14 +113,52 @@ class _PostDetailState extends State<PostDetail> {
                             '${channels.getPostViewCount(channels.selectedPostId!)} views / ${channels.totalAppUsers} users',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey[600],
+                              color: theme.textTheme.bodySmall?.color,
                             ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                  Icon(Icons.more_vert, color: Colors.grey[600]),
+                  PopupMenuButton<String>(
+                    tooltip: 'Post actions',
+                    icon: Icon(Icons.more_vert, color: theme.iconTheme.color),
+                    onSelected: (value) => _handlePostMenuAction(
+                      context,
+                      action: value,
+                      channels: channels,
+                      selectedPost: selectedPost,
+                    ),
+                    itemBuilder: (context) {
+                      if (selectedPost == null) {
+                        return const [
+                          PopupMenuItem<String>(
+                            enabled: false,
+                            value: 'none',
+                            child: Text('No post selected'),
+                          ),
+                        ];
+                      }
+                      return [
+                        PopupMenuItem<String>(
+                          value: 'toggle_agenda',
+                          child: Text(
+                            channels.isPostInAgenda(selectedPost.id)
+                                ? 'Remove from agenda'
+                                : 'Add to agenda',
+                          ),
+                        ),
+                        const PopupMenuItem<String>(
+                          value: 'copy_post',
+                          child: Text('Copy post text'),
+                        ),
+                        const PopupMenuItem<String>(
+                          value: 'refresh_feedback',
+                          child: Text('Refresh feedback'),
+                        ),
+                      ];
+                    },
+                  ),
                 ],
               ),
             ),
@@ -86,24 +172,43 @@ class _PostDetailState extends State<PostDetail> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Need 3 members for AI/ML project. Skills required: '
-                            'Python, TensorFlow. Meetings: Tue/Thu 2pm.',
+                            selectedPost?.body ?? '',
                             style: TextStyle(
                               fontSize: 15,
                               height: 1.5,
-                              color: Colors.grey[800],
+                              color: theme.textTheme.bodyMedium?.color,
                             ),
                           ),
                           const SizedBox(height: 20),
+                          if (selectedPost != null)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    channels.togglePostInAgenda(selectedPost.id),
+                                icon: Icon(
+                                  channels.isPostInAgenda(selectedPost.id)
+                                      ? Icons.bookmark_remove
+                                      : Icons.bookmark_add,
+                                ),
+                                label: Text(
+                                  channels.isPostInAgenda(selectedPost.id)
+                                      ? 'Remove from agenda'
+                                      : 'Add to agenda',
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
 
                           // CONSENT/REJECT BUTTONS (from your sketch)
                           if (isProposal)
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: Colors.orange[50],
+                                color: Colors.orange.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.orange),
+                                border: Border.all(
+                                    color: Colors.orange.withValues(alpha: 0.6)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,7 +217,7 @@ class _PostDetailState extends State<PostDetail> {
                                     'Your Response Required',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.orange[900],
+                                      color: Colors.orange.shade700,
                                     ),
                                   ),
                                   const SizedBox(height: 12),
@@ -158,50 +263,74 @@ class _PostDetailState extends State<PostDetail> {
                               ),
                             ),
 
-                          // COMMENTS (integrated under each post)
+                          // FEEDBACK (integrated under each post)
                           const SizedBox(height: 20),
                           Text(
-                            'Comments',
-                            style: TextStyle(
+                            'Feedback',
+                            style: theme.textTheme.titleMedium?.copyWith(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
                             ),
                           ),
                           const SizedBox(height: 12),
                           Container(
                             constraints: const BoxConstraints(minHeight: 80),
                             decoration: BoxDecoration(
-                              color: Colors.grey[100],
+                              color: scheme.surface.withValues(alpha: 0.7),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: ListView(
-                              shrinkWrap: true,
-                              padding: const EdgeInsets.all(12),
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Colors.blue[100],
+                            child: StreamBuilder<List<PostFeedback>>(
+                              stream: selectedPost == null
+                                  ? const Stream.empty()
+                                  : channels.watchFeedback(selectedPost.id),
+                              initialData: selectedPost == null
+                                  ? const []
+                                  : channels.getFeedbackForPost(selectedPost.id),
+                              builder: (context, snapshot) {
+                                final feedbackItems = snapshot.data ?? const [];
+                                if (feedbackItems.isEmpty) {
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12),
                                     child: Text(
-                                      'J',
-                                      style: TextStyle(color: Colors.blue[800]),
+                                      'No feedback yet. Be the first to post.',
+                                      style: theme.textTheme.bodySmall,
                                     ),
-                                  ),
-                                  title: const Text('John: Great project idea!'),
-                                  subtitle: Text(
-                                    '2 min ago',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                  trailing: Icon(
-                                    Icons.reply,
-                                    size: 18,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
+                                  );
+                                }
+                                return ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: feedbackItems.length,
+                                  padding: const EdgeInsets.all(12),
+                                  itemBuilder: (context, index) {
+                                    final item = feedbackItems[index];
+                                    return ListTile(
+                                      leading: Container(
+                                        width: 34,
+                                        height: 34,
+                                        decoration: BoxDecoration(
+                                          color: scheme.primary
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          Icons.person_outline,
+                                          size: 18,
+                                          color: scheme.primary,
+                                        ),
+                                      ),
+                                      title: Text('${item.authorName}: ${item.text}'),
+                                      subtitle: Text(
+                                        _formatRelativeTime(item.createdAt),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: theme.textTheme.bodySmall?.color,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -211,7 +340,7 @@ class _PostDetailState extends State<PostDetail> {
                                 child: TextField(
                                   controller: _chatController,
                                   decoration: InputDecoration(
-                                    hintText: 'Add a comment...',
+                                    hintText: 'Add feedback...',
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(20),
                                     ),
@@ -224,12 +353,18 @@ class _PostDetailState extends State<PostDetail> {
                               ),
                               const SizedBox(width: 8),
                               IconButton(
-                                icon: Icon(Icons.send, color: Colors.blue[700]),
-                                onPressed: () {
-                                  if (_chatController.text.isNotEmpty) {
-                                    setState(() {
-                                      _chatController.clear();
-                                    });
+                                icon: Icon(Icons.send, color: scheme.primary),
+                                onPressed: () async {
+                                  if (_chatController.text.trim().isNotEmpty &&
+                                      selectedPost != null &&
+                                      auth.user != null) {
+                                    final text = _chatController.text.trim();
+                                    _chatController.clear();
+                                    await channels.addFeedback(
+                                      selectedPost.id,
+                                      text,
+                                      author: auth.user!,
+                                    );
                                   }
                                 },
                               ),
@@ -243,7 +378,7 @@ class _PostDetailState extends State<PostDetail> {
                         'Select a post to view details',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[600],
+                          color: theme.textTheme.bodyMedium?.color,
                         ),
                       ),
                     ),
@@ -252,5 +387,13 @@ class _PostDetailState extends State<PostDetail> {
         );
       },
     );
+  }
+
+  String _formatRelativeTime(DateTime createdAt) {
+    final diff = DateTime.now().difference(createdAt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hr ago';
+    return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
   }
 }

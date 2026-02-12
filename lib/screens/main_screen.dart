@@ -6,6 +6,7 @@ import '../widgets/post_list.dart';
 import '../widgets/post_detail.dart';
 import '../widgets/quick_actions.dart';
 import 'login_screen.dart';
+import 'profile_setup_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -28,19 +29,39 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    final settings = Provider.of<AppSettingsProvider>(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Campus Comm',
+          'slinky',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: scheme.onPrimary,
           ),
         ),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
         actions: [
+          IconButton(
+            tooltip: 'Edit profile',
+            icon: const Icon(Icons.manage_accounts),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ProfileSetupScreen(fromLogin: false),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: settings.isDarkMode ? 'Switch to light mode' : 'Switch to dark mode',
+            icon: Icon(settings.isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: settings.toggleThemeMode,
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
@@ -61,7 +82,7 @@ class _MainScreenState extends State<MainScreen> {
           // LEFT: Channel List (from your sketch)
           Container(
             width: 250,
-            color: Colors.grey[50],
+            color: scheme.surface,
             child: const ChannelList(),
           ),
 
@@ -70,7 +91,7 @@ class _MainScreenState extends State<MainScreen> {
             child: Column(
               children: [
                 Expanded(child: PostList()),
-                Container(height: 1, color: Colors.grey[300]!),
+                Container(height: 1, color: theme.dividerColor),
                 SizedBox(height: 250, child: PostDetail()),
               ],
             ),
@@ -80,8 +101,8 @@ class _MainScreenState extends State<MainScreen> {
           Container(
             width: 280,
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(left: BorderSide(color: Colors.grey[300]!)),
+              color: scheme.surface,
+              border: Border(left: BorderSide(color: theme.dividerColor)),
             ),
             child: const QuickActions(),
           ),
