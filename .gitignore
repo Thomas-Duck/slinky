@@ -43,3 +43,26 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+
+# Firebase (if generated/configured locally)
+lib/firebase_options.dart
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist
+
+# Local editor state (keep shareable config out of this)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+.vscode/.history/
+.vscode/workspaceStorage/
+
+# Extra OS artifacts
+Thumbs.db
